@@ -1,0 +1,233 @@
+ @tailwind base;
+ @tailwind components;
+ @tailwind utilities;
+ 
+ /* FatigueFit Design System - Premium Fitness App */
+ 
+ @layer base {
+   :root {
+     /* Base colors - warm light theme */
+     --background: 40 20% 98%;
+     --foreground: 220 25% 12%;
+     
+     --card: 0 0% 100%;
+     --card-foreground: 220 25% 12%;
+     
+     --popover: 0 0% 100%;
+     --popover-foreground: 220 25% 12%;
+     
+     /* Brand colors - Teal/Cyan primary */
+     --primary: 174 72% 40%;
+     --primary-foreground: 0 0% 100%;
+     
+     /* Accent - Lime/Green */
+     --accent: 142 70% 45%;
+     --accent-foreground: 0 0% 100%;
+     
+     /* Secondary - Soft purple for onboarding */
+     --secondary: 270 50% 65%;
+     --secondary-foreground: 0 0% 100%;
+     
+     --muted: 220 15% 95%;
+     --muted-foreground: 220 10% 50%;
+     
+     --destructive: 0 72% 51%;
+     --destructive-foreground: 0 0% 100%;
+     
+     --border: 220 15% 90%;
+     --input: 220 15% 90%;
+     --ring: 174 72% 40%;
+     
+     /* Readiness state colors */
+     --recovering: 0 72% 55%;
+     --caution: 38 92% 50%;
+     --ready: 142 70% 45%;
+     --primed: 174 72% 40%;
+     
+     /* Progress zone colors */
+     --zone-low: 210 70% 55%;
+     --zone-optimal: 142 70% 45%;
+     --zone-high: 38 92% 50%;
+     --zone-overtrained: 0 72% 55%;
+     
+     /* Focus card dark glass */
+     --focus-bg: 220 30% 12%;
+     --focus-border: 174 60% 50%;
+     --focus-glow: 174 72% 40%;
+     
+     --radius: 1.5rem;
+     --radius-lg: 1.5rem;
+     --radius-md: 1.125rem;
+     --radius-sm: 0.75rem;
+     
+     /* Shadows */
+     --shadow-soft: 0 4px 20px -4px hsl(220 25% 12% / 0.08);
+     --shadow-card: 0 8px 30px -8px hsl(220 25% 12% / 0.1);
+     --shadow-focus: 0 0 30px hsl(174 72% 40% / 0.3);
+     
+     /* Gradients */
+     --gradient-primary: linear-gradient(135deg, hsl(174 72% 40%) 0%, hsl(142 70% 45%) 100%);
+     --gradient-secondary: linear-gradient(135deg, hsl(270 50% 65%) 0%, hsl(280 60% 75%) 100%);
+     --gradient-focus-border: linear-gradient(135deg, hsl(174 60% 50%) 0%, hsl(142 70% 50%) 100%);
+     
+     /* Sidebar */
+     --sidebar-background: 40 20% 97%;
+     --sidebar-foreground: 220 25% 12%;
+     --sidebar-primary: 174 72% 40%;
+     --sidebar-primary-foreground: 0 0% 100%;
+     --sidebar-accent: 220 15% 95%;
+     --sidebar-accent-foreground: 220 25% 12%;
+     --sidebar-border: 220 15% 90%;
+     --sidebar-ring: 174 72% 40%;
+   }
+   
+   .dark {
+     --background: 220 30% 8%;
+     --foreground: 220 15% 95%;
+     
+     --card: 220 30% 12%;
+     --card-foreground: 220 15% 95%;
+     
+     --popover: 220 30% 12%;
+     --popover-foreground: 220 15% 95%;
+     
+     --primary: 174 72% 45%;
+     --primary-foreground: 220 30% 8%;
+     
+     --accent: 142 70% 50%;
+     --accent-foreground: 220 30% 8%;
+     
+     --secondary: 270 50% 60%;
+     --secondary-foreground: 0 0% 100%;
+     
+     --muted: 220 25% 18%;
+     --muted-foreground: 220 15% 65%;
+     
+     --destructive: 0 72% 45%;
+     --destructive-foreground: 0 0% 100%;
+     
+     --border: 220 25% 20%;
+     --input: 220 25% 20%;
+     --ring: 174 72% 45%;
+     
+     --focus-bg: 220 35% 10%;
+     --focus-border: 174 65% 55%;
+     --focus-glow: 174 72% 45%;
+     
+     --shadow-soft: 0 4px 20px -4px hsl(0 0% 0% / 0.3);
+     --shadow-card: 0 8px 30px -8px hsl(0 0% 0% / 0.4);
+     --shadow-focus: 0 0 40px hsl(174 72% 45% / 0.4);
+     
+     --sidebar-background: 220 30% 10%;
+     --sidebar-foreground: 220 15% 95%;
+     --sidebar-primary: 174 72% 45%;
+     --sidebar-primary-foreground: 220 30% 8%;
+     --sidebar-accent: 220 25% 18%;
+     --sidebar-accent-foreground: 220 15% 95%;
+     --sidebar-border: 220 25% 20%;
+     --sidebar-ring: 174 72% 45%;
+   }
+ }
+ 
+ @layer base {
+   * {
+     @apply border-border;
+   }
+   
+   body {
+     @apply bg-background text-foreground antialiased;
+     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+   }
+ }
+ 
+ @layer utilities {
+   .gradient-primary {
+     background: var(--gradient-primary);
+   }
+   
+   .gradient-secondary {
+     background: var(--gradient-secondary);
+   }
+   
+   .shadow-soft {
+     box-shadow: var(--shadow-soft);
+   }
+   
+   .shadow-card {
+     box-shadow: var(--shadow-card);
+   }
+   
+   .shadow-focus {
+     box-shadow: var(--shadow-focus);
+   }
+   
+   .focus-card {
+     background: hsl(var(--focus-bg));
+     border: 1px solid hsl(var(--focus-border) / 0.3);
+     box-shadow: 0 0 30px hsl(var(--focus-glow) / 0.15);
+   }
+   
+   .focus-card-border {
+     position: relative;
+   }
+   
+   .focus-card-border::before {
+     content: '';
+     position: absolute;
+     inset: 0;
+     padding: 1px;
+     border-radius: inherit;
+     background: var(--gradient-focus-border);
+     -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+     mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+     -webkit-mask-composite: xor;
+     mask-composite: exclude;
+   }
+   
+   .glow-primary {
+     filter: drop-shadow(0 0 10px hsl(174 72% 40% / 0.4));
+   }
+   
+   .text-gradient-primary {
+     background: var(--gradient-primary);
+     -webkit-background-clip: text;
+     -webkit-text-fill-color: transparent;
+     background-clip: text;
+   }
+ }
+ 
+ /* Animations */
+ @keyframes pulse-glow {
+   0%, 100% { opacity: 0.6; }
+   50% { opacity: 1; }
+ }
+ 
+ @keyframes slide-up {
+   from { transform: translateY(10px); opacity: 0; }
+   to { transform: translateY(0); opacity: 1; }
+ }
+ 
+ @keyframes scale-in {
+   from { transform: scale(0.95); opacity: 0; }
+   to { transform: scale(1); opacity: 1; }
+ }
+ 
+ @keyframes fill-progress {
+   from { width: 0; }
+ }
+ 
+ .animate-pulse-glow {
+   animation: pulse-glow 2s ease-in-out infinite;
+ }
+ 
+ .animate-slide-up {
+   animation: slide-up 0.4s ease-out;
+ }
+ 
+ .animate-scale-in {
+   animation: scale-in 0.3s ease-out;
+ }
+ 
+ .animate-fill-progress {
+   animation: fill-progress 0.8s ease-out;
+ }
