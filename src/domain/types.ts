@@ -98,14 +98,13 @@ export type SorenessMap = Partial<Record<MuscleSection, number>>; // 0-4
 
 export interface WorkoutSession {
   id: string;
-  startedAt: number;
-  endedAt: number | null;
-  startedLocation?: WorkoutLocation;
-  durationSeconds?: number;
   status: 'in_progress' | 'ended';
+  startedAt: number;
+  endedAt?: number;
+  durationSeconds?: number;
+  startedLocation?: WorkoutLocation;
   focusMuscles: MuscleGroup[];
   exerciseEntries: ExerciseEntry[];
-  sets: LoggedSet[]; // Legacy, kept for backward compatibility
   preWorkoutSorenessSnapshot?: SorenessMap;
 }
 
@@ -147,14 +146,20 @@ export type RecoveryState = 'REST' | 'CAUTION' | 'READY';
 
 export interface UserCoachState {
   lastEndedSessionId?: string;
-  lastWorkoutEndedAt?: number;
-  nextRecommendedStartAt?: number;
+  lastWorkoutEndedAt?: number; // timestamp
+  nextRecommendedStartAt?: number; // timestamp
   restHoursRecommended?: number;
   averageIntervalHours?: number;
   daysSinceLastWorkout?: number;
+
   consistencyState: ConsistencyState;
   recoveryState: RecoveryState;
+
+  // Computed at runtime/UI, but can be cached here if needed, 
+  // though generally better to derive from the states above in the UI.
+  // We keep it for now as per previous logic, but it's not strictly persisted in the minimal schema.
   coachBanner: CoachBanner;
+
   updatedAt: number;
 }
 

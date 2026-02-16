@@ -6,6 +6,7 @@ import {
     RecoveryState,
     UserProfile
 } from '../types';
+import { computeConsistencyState } from './consistencyEngine';
 
 interface CoachContext {
     sessions: WorkoutSession[];
@@ -44,51 +45,24 @@ export function computeCoachState(context: CoachContext): UserCoachState {
     }
 
     // 3. Compute Consistency State
-    // Calculate average interval
-    let averageIntervalHours = 48; // Default fallback
-    if (endedSessions.length >= 2) {
-        // Compute last 5 intervals
-        const recent = endedSessions.slice(0, 6); // need 6 to get 5 intervals
-        let totalDiff = 0;
-        let count = 0;
+    const consistencyState = computeConsistencyState(sessions, profile.daysPerWeek);
 
-        for (let i = 0; i < recent.length - 1; i++) {
-            const current = recent[i].endedAt!;
-            const prev = recent[i + 1].endedAt!;
-            totalDiff += (current - prev);
-            count++;
-        }
-
-        if (count > 0) {
-            averageIntervalHours = (totalDiff / count) / (1000 * 60 * 60);
-        }
-    }
-
+    // Helper vars for stats
     const daysSinceLastWorkout = lastWorkoutEndedAt
         ? Math.floor((now - lastWorkoutEndedAt) / (24 * 60 * 60 * 1000))
         : 0;
 
-    const targetFreq = profile.daysPerWeek || 3;
-    // Estimated max gap allowed based on frequency (e.g. 3 days/week -> ~2.3 days gap avg)
-    // For v1 we stick to the simple rules from requirements
-    // ON_TRACK: daysSince <= ceil(avg/24)
-    // MISSED: daysSince == ceil + 1
-    // DRIFTING: daysSince +2 ... +3
-    // RESET: >= +4
-
-    const avgDays = Math.ceil(averageIntervalHours / 24);
-
-    let consistencyState: ConsistencyState = 'ON_TRACK';
-    if (!lastWorkoutEndedAt) {
-        consistencyState = 'RESET'; // New user effectively
-    } else if (daysSinceLastWorkout <= avgDays) {
-        consistencyState = 'ON_TRACK';
-    } else if (daysSinceLastWorkout === avgDays + 1) {
-        consistencyState = 'MISSED';
-    } else if (daysSinceLastWorkout <= avgDays + 3) {
-        consistencyState = 'DRIFTING';
-    } else {
-        consistencyState = 'RESET';
+    // Re-calculate average for stats (duplicated logic for now, could export from consistency)
+    let averageIntervalHours = 48;
+    if (endedSessions.length >= 2) {
+        const recent = endedSessions.slice(0, 6);
+        let totalDiff = 0;
+        let count = 0;
+        for (let i = 0; i < recent.length - 1; i++) {
+            totalDiff += (recent[i].endedAt! - recent[i + 1].endedAt!);
+            count++;
+        }
+        if (count > 0) averageIntervalHours = (totalDiff / count) / (3600000);
     }
 
     // 4. Generate Coach Banner

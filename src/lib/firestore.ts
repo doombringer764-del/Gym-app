@@ -7,57 +7,222 @@ import {
     orderBy,
     limit,
     getDocs,
-    Timestamp
+    Timestamp,
+    writeBatch
 } from 'firebase/firestore';
 import { db } from './firebase';
 import {
     UserProfile,
     UserSettings,
     WorkoutSession,
-    UserCoachState
+    UserCoachState,
+    ExerciseEntry,
+    SetEntry,
+    MuscleGroup,
+    SorenessMap,
+    MuscleSection
 } from '@/domain/types';
+import {
+    SessionDocument,
+    FirestoreExerciseEntry,
+    CoachStateDocument,
+    DailyDocument,
+    SettingsDocument,
+    UserDocument
+} from '@/domain/firestoreTypes';
 
-// -- User Settings --
-export async function saveUserSettings(userId: string, settings: UserSettings) {
-    await setDoc(doc(db, 'users', userId, 'settings', 'main'), settings, { merge: true });
-}
+// -- Helpers --
 
-export async function loadUserSettings(userId: string): Promise<UserSettings | null> {
-    const snap = await getDoc(doc(db, 'users', userId, 'settings', 'main'));
-    return snap.exists() ? (snap.data() as UserSettings) : null;
-}
+const COLL_USERS = 'users';
+const COLL_SESSIONS = 'sessions';
+const COLL_DAILY = 'daily';
 
 // -- User Profile --
+
 export async function saveUserProfile(userId: string, profile: UserProfile) {
-    await setDoc(doc(db, 'users', userId), { profile }, { merge: true });
+    // We only store minimal metadata in the root user doc if needed, 
+    // or we can store the full profile there. 
+    // The requirement said: "Basic profile metadata... Do NOT store session data here."
+    // We will store the full UserProfile in users/{uid} for now as it contains
+    // onboarding status, etc. 
+    // We might want to split it if it gets too big, but for now it's fine.
+
+    // Map domain profile to persistence format if needed, or store directly if compatible.
+    // UserProfile in types.ts has some deprecated fields, we should be clean.
+
+    const data: UserDocument & Partial<UserProfile> = {
+        createdAt: profile.createdAt,
+        lastLoginAt: Date.now(),
+        onboardingCompleted: profile.isOnboarded,
+        calibrationStatus: profile.isCalibrating ? 'in_progress' : 'done', // mapping old boolean
+        ...profile // Store other fields for now to be safe
+    };
+
+    await setDoc(doc(db, COLL_USERS, userId), data, { merge: true });
 }
 
 export async function loadUserProfile(userId: string): Promise<UserProfile | null> {
-    const snap = await getDoc(doc(db, 'users', userId));
-    return snap.exists() ? (snap.data().profile as UserProfile) : null;
+    const snap = await getDoc(doc(db, COLL_USERS, userId));
+    if (!snap.exists()) return null;
+    const data = snap.data();
+    return data as UserProfile;
+}
+
+// -- User Settings --
+
+export async function saveUserSettings(userId: string, settings: UserSettings) {
+    // Map to SettingsDocument
+    const data: SettingsDocument = {
+        units: settings.units,
+        calibrationMode: settings.calibrationMode,
+        targetSessionsPerWeek: 3, // Default if missing in domain types
+        goal: 'hypertrophy',
+        ...settings // Spread any extras
+    };
+    await setDoc(doc(db, COLL_USERS, userId, 'settings', 'main'), data, { merge: true });
+}
+
+export async function loadUserSettings(userId: string): Promise<UserSettings | null> {
+    const snap = await getDoc(doc(db, COLL_USERS, userId, 'settings', 'main'));
+    if (!snap.exists()) return null;
+    return snap.data() as UserSettings;
 }
 
 // -- Workout Sessions --
-export async function saveWorkoutSession(userId: string, session: WorkoutSession) {
-    await setDoc(doc(db, 'users', userId, 'sessions', session.id), session);
+
+function mapSessionToFirestore(session: WorkoutSession): SessionDocument {
+    return {
+        id: session.id,
+        status: session.status,
+        startedAt: session.startedAt,
+        endedAt: session.endedAt || undefined,
+        durationSeconds: session.durationSeconds,
+        startedLocation: session.startedLocation,
+        focusMuscles: session.focusMuscles,
+        preWorkoutSorenessSnapshot: session.preWorkoutSorenessSnapshot,
+        exerciseEntries: session.exerciseEntries.map(e => ({
+            id: e.id,
+            exerciseId: e.exerciseId,
+            name: e.name,
+            targets: e.targets,
+            sets: e.sets.map(s => ({
+                id: s.id,
+                weightKg: s.weightKg,
+                reps: s.reps,
+                rpe: s.rpe,
+                createdAt: s.createdAt
+            }))
+        }))
+    };
 }
 
-export async function loadRecentSessions(userId: string, limitCount = 50): Promise<WorkoutSession[]> {
+function mapFirestoreToSession(doc: SessionDocument): WorkoutSession {
+    return {
+        id: doc.id,
+        status: doc.status,
+        startedAt: doc.startedAt,
+        endedAt: doc.endedAt || null,
+        durationSeconds: doc.durationSeconds,
+        startedLocation: doc.startedLocation,
+        focusMuscles: doc.focusMuscles,
+        preWorkoutSorenessSnapshot: doc.preWorkoutSorenessSnapshot,
+        sets: [], // Legacy field empty
+        exerciseEntries: doc.exerciseEntries.map(e => ({
+            id: e.id,
+            exerciseId: e.exerciseId,
+            name: e.name,
+            targets: e.targets || [],
+            sets: e.sets.map(s => ({
+                id: s.id,
+                weightKg: s.weightKg,
+                reps: s.reps,
+                rpe: s.rpe,
+                createdAt: s.createdAt
+            }))
+        }))
+    };
+}
+
+export async function saveWorkoutSession(userId: string, session: WorkoutSession) {
+    const docData = mapSessionToFirestore(session);
+    await setDoc(doc(db, COLL_USERS, userId, COLL_SESSIONS, session.id), docData);
+}
+
+export async function loadRecentSessions(userId: string, limitCount = 30): Promise<WorkoutSession[]> {
     const q = query(
-        collection(db, 'users', userId, 'sessions'),
+        collection(db, COLL_USERS, userId, COLL_SESSIONS),
         orderBy('startedAt', 'desc'),
         limit(limitCount)
     );
     const snap = await getDocs(q);
-    return snap.docs.map(d => d.data() as WorkoutSession);
+    return snap.docs.map(d => mapFirestoreToSession(d.data() as SessionDocument));
+}
+
+// -- Daily Soreness --
+
+export async function saveDailySoreness(userId: string, dateKey: string, soreness: SorenessMap) {
+    const data: DailyDocument = {
+        dateKey,
+        sorenessBySectionKey: soreness,
+        updatedAt: Date.now()
+    };
+    await setDoc(doc(db, COLL_USERS, userId, COLL_DAILY, dateKey), data, { merge: true });
+}
+
+export async function loadDailyHistory(userId: string, limitCount = 7): Promise<DailyDocument[]> {
+    // Note: To sort by dateKey, strictly we should use YYYY-MM-DD which sorts alphabetically correctly
+    const q = query(
+        collection(db, COLL_USERS, userId, COLL_DAILY),
+        orderBy('dateKey', 'desc'),
+        limit(limitCount)
+    );
+    const snap = await getDocs(q);
+    return snap.docs.map(d => d.data() as DailyDocument);
 }
 
 // -- Coach State --
+
 export async function saveCoachState(userId: string, state: UserCoachState) {
-    await setDoc(doc(db, 'users', userId, 'coach', 'state'), state);
+    const data: CoachStateDocument = {
+        lastWorkoutEndedAt: state.lastWorkoutEndedAt,
+        nextRecommendedStartAt: state.nextRecommendedStartAt,
+        restHoursRecommended: state.restHoursRecommended || 24,
+        recoveryState: state.recoveryState,
+        consistencyState: state.consistencyState,
+        averageIntervalHours: state.averageIntervalHours || 48,
+        updatedAt: state.updatedAt
+    };
+    await setDoc(doc(db, COLL_USERS, userId, 'coach', 'state'), data);
 }
 
 export async function loadCoachState(userId: string): Promise<UserCoachState | null> {
-    const snap = await getDoc(doc(db, 'users', userId, 'coach', 'state'));
-    return snap.exists() ? (snap.data() as UserCoachState) : null;
+    const snap = await getDoc(doc(db, COLL_USERS, userId, 'coach', 'state'));
+    if (!snap.exists()) return null;
+
+    const data = snap.data() as CoachStateDocument;
+
+    // Convert back to UserCoachState
+    // We might need to re-generate the CoachBanner here or in the UI.
+    // Ideally the UI/Engine re-calculates the banner based on these states.
+    // For now we return a partial object that the Store can merge/hydrate.
+
+    return {
+        ...data,
+        coachBanner: { // Placeholder, should be recomputed
+            title: '',
+            subtitle: '',
+            severity: 'default',
+            primaryCta: ''
+        }
+    } as UserCoachState;
+}
+
+// -- Migration Helper --
+export async function batchSaveSessions(userId: string, sessions: WorkoutSession[]) {
+    const batch = writeBatch(db);
+    sessions.forEach(session => {
+        const ref = doc(db, COLL_USERS, userId, COLL_SESSIONS, session.id);
+        batch.set(ref, mapSessionToFirestore(session));
+    });
+    await batch.commit();
 }

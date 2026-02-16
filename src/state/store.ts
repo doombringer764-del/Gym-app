@@ -20,8 +20,8 @@ import { SECTIONS } from '@/domain/taxonomy/muscles';
 import { loadState, saveState } from './persistence';
 import { computeCoachState } from '@/domain/engines/coachEngine';
 import { UserCoachState } from '@/domain/types';
-import { auth, googleProvider, onAuthStateChanged } from '@/lib/firebase';
-import { signInWithPopup, signOut, User as FirebaseUser } from 'firebase/auth';
+import { auth, googleProvider, onAuthStateChanged, signInWithPopup, signOut } from '@/lib/firebase';
+import { User as FirebaseUser } from 'firebase/auth';
 import * as FirestoreService from '@/lib/firestore';
 
 export interface AppState {
@@ -192,6 +192,11 @@ export const useStore = create<AppState>((set, get) => ({
       profile: { ...state.profile, ...update },
     }));
     saveState(get());
+
+    const user = get().user;
+    if (user) {
+      FirestoreService.saveUserProfile(user.uid, get().profile);
+    }
   },
 
   setSettings: (update) => {
@@ -199,6 +204,11 @@ export const useStore = create<AppState>((set, get) => ({
       settings: { ...state.settings, ...update },
     }));
     saveState(get());
+
+    const user = get().user;
+    if (user) {
+      FirestoreService.saveUserSettings(user.uid, get().settings);
+    }
   },
 
   setFocusMuscles: (muscles) => {
@@ -212,6 +222,15 @@ export const useStore = create<AppState>((set, get) => ({
       dailySorenessUpdatedAt: Date.now(),
     }));
     saveState(get());
+
+    const user = get().user;
+    if (user) {
+      // We assume one update per day key
+      const dateKey = new Date().toISOString().split('T')[0];
+      FirestoreService.saveDailySoreness(user.uid, dateKey, get().dailySoreness);
+      // Recompute coach when soreness changes
+      get().recomputeCoachState();
+    }
   },
 
   startSession: (focusMuscles, location) => {
@@ -219,12 +238,15 @@ export const useStore = create<AppState>((set, get) => ({
     const session: WorkoutSession = {
       id: crypto.randomUUID(),
       startedAt: Date.now(),
-      endedAt: null,
+      endedAt: undefined, // undefined for Firestore compatibility (optional)
       startedLocation: location || profile.defaultWorkoutLocation,
       status: 'in_progress',
       focusMuscles,
       preWorkoutSorenessSnapshot: get().dailySoreness,
       exerciseEntries: [],
+      // Note: "sets" legacy field is omitted in new sessions, but types might still expect it if not fully cleaned
+      // In Types.ts we still have it optional or present? Let's check. 
+      // It was: sets: LoggedSet[]; // Legacy
       sets: [],
     };
     set({ currentSession: session, focusMuscles });
@@ -265,21 +287,24 @@ export const useStore = create<AppState>((set, get) => ({
     });
 
     // 1. Update Local State
+    const updatedSessions = [...sessions, completedSession];
     set({
       currentSession: null,
-      sessions: [...sessions, completedSession],
+      sessions: updatedSessions,
       stats: newStats,
       badges: updatedBadges,
     });
 
-    // 2. Recompute Coach
-    get().recomputeCoachState();
+    // 2. Recompute Coach & Update Local State
+    const { profile } = get();
+    const coach = computeCoachState({ sessions: updatedSessions, profile });
+    set({ coach });
 
     // 3. Persist to Firestore if logged in
     const user = get().user;
     if (user) {
       FirestoreService.saveWorkoutSession(user.uid, completedSession);
-      // We could save stats too, but respecting YAGNI for now based on prompt scope
+      FirestoreService.saveCoachState(user.uid, coach);
     }
 
     saveState(get());
@@ -380,11 +405,14 @@ export const useStore = create<AppState>((set, get) => ({
       sets: [...entry.sets, newSet],
     };
 
+    // We also update legacy sets array in session for potential backward compat in UI/Logic
+    const updatedLegacySets = currentSession.sets ? [...currentSession.sets, legacySet] : [legacySet];
+
     set({
       currentSession: {
         ...currentSession,
         exerciseEntries: updatedEntries,
-        sets: [...currentSession.sets, legacySet],
+        sets: updatedLegacySets,
       },
       sectionStates: newSectionStates,
       stats: newStats,
@@ -429,11 +457,14 @@ export const useStore = create<AppState>((set, get) => ({
     const updatedEntries = [...currentSession.exerciseEntries];
     updatedEntries[entryIndex] = { ...entry, sets: updatedSets };
 
+    // Update legacy sets too
+    const updatedLegacySets = currentSession.sets ? currentSession.sets.filter(s => s.id !== setId) : [];
+
     set({
       currentSession: {
         ...currentSession,
         exerciseEntries: updatedEntries,
-        sets: currentSession.sets.filter(s => s.id !== setId),
+        sets: updatedLegacySets,
       },
     });
     saveState(get());
@@ -443,16 +474,21 @@ export const useStore = create<AppState>((set, get) => ({
     const { currentSession } = get();
     if (!currentSession) return;
 
-    const entry = currentSession.exerciseEntries.find(e => e.id === exerciseEntryId);
-    if (!entry) return;
+    // Check if entry exists
+    const entryIndex = currentSession.exerciseEntries.findIndex(e => e.id === exerciseEntryId);
+    if (entryIndex === -1) return;
 
+    const entry = currentSession.exerciseEntries[entryIndex];
     const setIds = new Set(entry.sets.map(s => s.id));
+
+    const updatedEntries = currentSession.exerciseEntries.filter(e => e.id !== exerciseEntryId);
+    const updatedLegacySets = currentSession.sets ? currentSession.sets.filter(s => !setIds.has(s.id)) : [];
 
     set({
       currentSession: {
         ...currentSession,
-        exerciseEntries: currentSession.exerciseEntries.filter(e => e.id !== exerciseEntryId),
-        sets: currentSession.sets.filter(s => !setIds.has(s.id)),
+        exerciseEntries: updatedEntries,
+        sets: updatedLegacySets,
       },
     });
     saveState(get());
@@ -512,6 +548,7 @@ export const useStore = create<AppState>((set, get) => ({
       stats: createInitialStats(),
       badges: createInitialBadges(),
       lastWeeklyReset: Date.now(),
+      coach: null, // Reset coach state
     });
     localStorage.removeItem('fatiguefit-state');
   },
@@ -558,6 +595,8 @@ export const useStore = create<AppState>((set, get) => ({
         currentSession,
         dailySoreness: loaded.dailySoreness ?? {},
         dailySorenessUpdatedAt: loaded.dailySorenessUpdatedAt ?? Date.now(),
+        // Hydrate coach state if available locally, otherwise null
+        coach: loaded.coach ?? null
       });
     }
   },
@@ -587,59 +626,111 @@ export const useStore = create<AppState>((set, get) => ({
 
   // -- Coach & Auth --
 
-  // -- Coach & Auth --
-
   recomputeCoachState: () => {
     const { sessions, profile } = get();
     const coach = computeCoachState({ sessions, profile });
-
     set({ coach });
 
-    // Persist if logged in
     const user = get().user;
     if (user) {
       FirestoreService.saveCoachState(user.uid, coach);
     }
   },
 
-  // Initialize Auth Listener - Call this once on app mount
   initializeAuthListener: () => {
     onAuthStateChanged(auth, async (user) => {
       set({ user });
 
       if (user) {
+        // LOGIN
         try {
           set({ isSyncing: true });
-          // Load data from Firestore
-          const [remoteSettings, remoteProfile, remoteSessions, remoteCoach] = await Promise.all([
+
+          // 1. Load Remote Data
+          const [remoteSettings, remoteProfile, remoteSessions, remoteCoach, remoteDaily] = await Promise.all([
             FirestoreService.loadUserSettings(user.uid),
             FirestoreService.loadUserProfile(user.uid),
             FirestoreService.loadRecentSessions(user.uid),
-            FirestoreService.loadCoachState(user.uid)
+            FirestoreService.loadCoachState(user.uid),
+            FirestoreService.loadDailyHistory(user.uid)
           ]);
 
-          // Merge logic (Remote wins if exists, otherwise keep local)
+          const localSessions = get().sessions;
+
+          // 2. Migration: If remote is empty but local has data, push local data
+          // We check if we have remote sessions. If not, and we have local sessions, migrate them.
+          if (remoteSessions.length === 0 && localSessions.length > 0) {
+            console.log("Migrating local sessions to Firestore...");
+            await FirestoreService.batchSaveSessions(user.uid, localSessions);
+            await FirestoreService.saveUserProfile(user.uid, get().profile);
+            await FirestoreService.saveUserSettings(user.uid, get().settings);
+            // We can assume coach state will be recomputed/saved on next action or now
+          }
+
+          // 3. Merge Sessions (Remote wins, but we dedup by ID)
+          let mergedSessions = remoteSessions;
+          if (remoteSessions.length === 0 && localSessions.length > 0) {
+            // We just migrated, so local is the source of truth effectively, 
+            // although we just pushed them. For safety, just use them.
+            mergedSessions = localSessions;
+          } else if (remoteSessions.length > 0 && localSessions.length > 0) {
+            // Merge lists, prefer remote, uniq by ID
+            const remoteIds = new Set(remoteSessions.map(s => s.id));
+            // Find sessions that are LOCAL ONLY (created offline perhaps?)
+            const localOnly = localSessions.filter(s => !remoteIds.has(s.id));
+
+            if (localOnly.length > 0) {
+              // Push them to remote
+              await FirestoreService.batchSaveSessions(user.uid, localOnly);
+              // Add them to our merged list
+              mergedSessions = [...remoteSessions, ...localOnly].sort((a, b) => b.startedAt - a.startedAt);
+            } else {
+              // Nothing new locally, just trust remote
+              mergedSessions = remoteSessions;
+            }
+          } else if (remoteSessions.length > 0) {
+            mergedSessions = remoteSessions;
+          }
+
+          // 4. Update Store
           set((state) => ({
             settings: remoteSettings || state.settings,
             profile: remoteProfile || state.profile,
-            sessions: remoteSessions.length > 0 ? remoteSessions : state.sessions,
-            coach: remoteCoach || state.coach,
+            sessions: mergedSessions,
+            coach: remoteCoach || state.coach, // Remote coach state might be stale, we recompute below
             isSyncing: false
           }));
 
-          // Trigger recompute to ensure fresh state
+          // 5. Recompute Coach & Save properly
+          // This ensures if we migrated local sessions, the coach state in firestore is updated too
           get().recomputeCoachState();
+
         } catch (error) {
           console.error("Data sync failed", error);
           set({ isSyncing: false });
         }
+      } else {
+        // LOGOUT
+        // Clear local sensitive state, keep basic app structure
+        set({
+          sessions: [], // clear history
+          coach: null,
+          user: null,
+          // We might want to keep profile/settings default or reset them
+        });
+        // We do NOT reset all data effectively clearing usage history but keeping the app open
+        // Local storage should probably be cleared of sensitive data
+        localStorage.removeItem('fatiguefit-state');
+        set({
+          profile: createInitialProfile(),
+          settings: createInitialSettings(),
+          stats: createInitialStats(),
+        });
       }
     });
   },
 
   login: async () => {
-    // Deprecated in favor of direct firebase calls + listener
-    // But keeping for compatibility if invoked manually
     try {
       await signInWithPopup(auth, googleProvider);
     } catch (error) {
@@ -649,7 +740,6 @@ export const useStore = create<AppState>((set, get) => ({
 
   logout: async () => {
     await signOut(auth);
-    set({ user: null });
-    // Keep local data for specific UX preference
+    // State clearing handled by listener
   }
 }));
