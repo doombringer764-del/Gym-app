@@ -14,44 +14,59 @@ import { AuthPage } from "@/features/auth/AuthPage";
 import { OnboardingPage } from "@/features/onboarding/OnboardingPage";
 import { ProfilePage } from "@/features/profile/ProfilePage";
 import { MusclePage } from "@/features/muscle/MusclePage";
+import { AppGate } from "@/features/auth/AppGate";
 
 const queryClient = new QueryClient();
 
-function AppContent() {
-  const { profile, hydrate, initializeAuthListener } = useStore();
-  const navigate = useNavigate();
-  const location = useLocation();
-
-  useEffect(() => {
-    hydrate();
-    initializeAuthListener();
-  }, [hydrate, initializeAuthListener]);
-
-  // Check if onboarding is needed
-  useEffect(() => {
-    if (!profile.isOnboarded && location.pathname !== '/onboarding' && location.pathname !== '/auth') {
-      navigate('/onboarding');
-    }
-  }, [profile.isOnboarded, navigate, location.pathname]);
-
-  const isWorkoutMode = useStore(state => !!state.currentSession);
-
+const AppContent = () => {
   return (
     <div className="min-h-screen bg-background text-foreground font-sans antialiased selection:bg-primary/20">
       <Routes>
-        <Route path="/" element={<TodayPage />} />
-        <Route path="/muscles" element={<MusclePage />} />
-        <Route path="/workout" element={<WorkoutPage />} />
-        <Route path="/workout/session/:sessionId" element={<SessionDetailPage />} />
-        <Route path="/profile" element={<ProfilePage />} />
-        <Route path="/settings" element={<SettingsPage />} />
-        <Route path="/onboarding" element={<OnboardingPage />} />
-        <Route path="/auth" element={<AuthPage />} />
+        <Route element={<AppGate />}>
+          <Route path="/auth" element={<AuthPage />} />
+          <Route path="/onboarding" element={<OnboardingPage />} />
+
+          <Route path="/" element={
+            <>
+              <TodayPage />
+              <BottomNav />
+            </>
+          } />
+
+          <Route path="/muscles" element={
+            <>
+              <MusclePage />
+              <BottomNav />
+            </>
+          } />
+
+          <Route path="/workout" element={
+            <>
+              <WorkoutPage />
+              <BottomNav />
+            </>
+          } />
+
+          <Route path="/workout/session/:sessionId" element={<SessionDetailPage />} />
+
+          <Route path="/profile" element={
+            <>
+              <ProfilePage />
+              <BottomNav />
+            </>
+          } />
+
+          <Route path="/settings" element={
+            <>
+              <SettingsPage />
+              <BottomNav />
+            </>
+          } />
+        </Route>
       </Routes>
-      {!isWorkoutMode && <BottomNav />}
     </div>
   );
-}
+};
 
 const App = () => (
   <QueryClientProvider client={queryClient}>

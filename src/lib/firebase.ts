@@ -5,6 +5,7 @@ import {
     signInWithPopup,
     signInWithEmailAndPassword,
     createUserWithEmailAndPassword,
+    signInAnonymously,
     signOut,
     onAuthStateChanged,
     User
@@ -40,6 +41,7 @@ export {
     signInWithPopup,
     signInWithEmailAndPassword,
     createUserWithEmailAndPassword,
+    signInAnonymously,
     signOut,
     onAuthStateChanged
 };

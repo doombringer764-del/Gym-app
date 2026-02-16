@@ -7,7 +7,7 @@ import { MuscleChip } from '@/ui/MuscleChip';
 import { getRecommendedExercises } from '@/domain/engines/planEngine';
 import { MUSCLES } from '@/domain/taxonomy/muscles';
 import { getSectionReadiness } from '@/domain/engines/readinessEngine';
-import type { MuscleGroup, ReadinessState, ExerciseEntry, WorkoutLocation } from '@/domain/types';
+import type { MuscleGroup, ReadinessState, ExerciseEntry } from '@/domain/types';
 import { Play, Square, Plus, Dumbbell, ListPlus, MapPin, Building2, Home, HelpCircle } from 'lucide-react';
 import { LogSetSheet } from './LogSetSheet';
 import { AddExerciseSheet } from './AddExerciseSheet';
@@ -23,6 +23,8 @@ import { WeeklyStats } from './history/WeeklyStats';
 import { SessionHistoryList } from './history/SessionHistoryList';
 import { CoachBanner } from '../coach/CoachBanner';
 import { StartWorkoutGate } from '../coach/StartWorkoutGate';
+import { StartWorkoutModal } from './StartWorkoutModal';
+import { WorkoutLocation, TimePreference } from '@/domain/types';
 
 export function WorkoutPage() {
   const navigate = useNavigate();
@@ -45,6 +47,7 @@ export function WorkoutPage() {
   const [showAddExercise, setShowAddExercise] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
   const [showLocationDialog, setShowLocationDialog] = useState(false);
+  const [showStartModal, setShowStartModal] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   const exerciseRefs = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -93,21 +96,22 @@ export function WorkoutPage() {
     [focusMuscles, sectionStates]
   );
 
-  const handleStartSession = () => {
-    startSession(focusMuscles);
+  const handleStartSession = (location: WorkoutLocation, timeBucket: TimePreference) => {
+    startSession(focusMuscles, location, timeBucket);
   };
 
   const handleStartClick = () => {
     if (coach?.recoveryState === 'REST') {
       setIsGateOpen(true);
     } else {
-      handleStartSession();
+      setShowStartModal(true);
     }
   };
 
+  // When gate confirms, we show the modal
   const handleGateConfirm = () => {
     setIsGateOpen(false);
-    handleStartSession();
+    setShowStartModal(true);
   };
 
   const handleEndSession = () => {
@@ -213,6 +217,12 @@ export function WorkoutPage() {
           onOpenChange={setIsGateOpen}
           onConfirm={handleGateConfirm}
           onCancel={() => setIsGateOpen(false)}
+        />
+
+        <StartWorkoutModal
+          open={showStartModal}
+          onOpenChange={setShowStartModal}
+          onConfirm={handleStartSession}
         />
       </div>
     );

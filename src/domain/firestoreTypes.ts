@@ -7,6 +7,12 @@ export interface UserDocument {
     lastLoginAt: number;
     onboardingCompleted: boolean;
     calibrationStatus: 'not_started' | 'in_progress' | 'done';
+
+    // New fields
+    ageYears?: number;
+    heightCm?: number;
+    weightKg?: number;
+    experienceLevel?: 'beginner' | 'intermediate' | 'advanced';
 }
 
 export interface SettingsDocument {
@@ -40,7 +46,9 @@ export interface SessionDocument {
     startedAt: number;
     endedAt?: number;
     durationSeconds?: number;
+
     startedLocation?: WorkoutLocation;
+    startedTimeBucket?: 'morning' | 'afternoon' | 'evening' | 'night';
     focusMuscles: MuscleGroup[];
     exerciseEntries: FirestoreExerciseEntry[];
 

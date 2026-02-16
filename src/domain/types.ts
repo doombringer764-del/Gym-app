@@ -23,7 +23,7 @@ export type UserMode = 'beginner' | 'intermediate';
 
 export type Goal = 'hypertrophy';
 
-export type TimePreference = 'morning' | 'afternoon' | 'evening';
+export type TimePreference = 'morning' | 'afternoon' | 'evening' | 'night';
 
 export type WeightUnit = 'lb' | 'kg';
 
@@ -85,13 +85,19 @@ export interface UserProfile {
   goal: Goal;
   daysPerWeek: number;
   sessionLength: number; // minutes
-  timePreference: TimePreference;
+  timePreference: TimePreference; // Deprecated, use session context
   isOnboarded: boolean;
   isCalibrating: boolean; // Deprecated, use settings.calibrationMode
   fatigueSensitivity: number; // multiplier, default 1
   createdAt: number;
   weightUnit: WeightUnit; // Deprecated, use settings.units
-  defaultWorkoutLocation?: WorkoutLocation;
+  defaultWorkoutLocation?: WorkoutLocation; // Deprecated, use session context
+
+  // New Fields
+  ageYears?: number;
+  heightCm?: number;
+  weightKg?: number;
+  experienceLevel?: 'beginner' | 'intermediate' | 'advanced';
 }
 
 export type SorenessMap = Partial<Record<MuscleSection, number>>; // 0-4
@@ -102,7 +108,8 @@ export interface WorkoutSession {
   startedAt: number;
   endedAt?: number;
   durationSeconds?: number;
-  startedLocation?: WorkoutLocation;
+  startedLocation: WorkoutLocation; // Required now
+  startedTimeBucket?: TimePreference; // New field
   focusMuscles: MuscleGroup[];
   exerciseEntries: ExerciseEntry[];
   preWorkoutSorenessSnapshot?: SorenessMap;

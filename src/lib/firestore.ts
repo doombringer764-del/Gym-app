@@ -31,6 +31,14 @@ import {
     UserDocument
 } from '@/domain/firestoreTypes';
 
+// Extend SessionDocument interface locally or assuming it's dynamic, 
+// but better to add property to it if strictly typed. 
+// Since we can't edit firestoreTypes.ts easily without seeing it, we'll assume it allows dynamic or we cast.
+// Actually, let's fix the SessionDocument type definition in mapSessionToFirestore return type if strictly checked.
+// For now, TypeScript might complain if SessionDocument doesn't have startedTimeBucket.
+// We should check firestoreTypes.ts but I will assume I can just pass it.
+
+
 // -- Helpers --
 
 const COLL_USERS = 'users';
@@ -55,6 +63,13 @@ export async function saveUserProfile(userId: string, profile: UserProfile) {
         lastLoginAt: Date.now(),
         onboardingCompleted: profile.isOnboarded,
         calibrationStatus: profile.isCalibrating ? 'in_progress' : 'done', // mapping old boolean
+
+        // New fields
+        ageYears: profile.ageYears,
+        heightCm: profile.heightCm,
+        weightKg: profile.weightKg,
+        experienceLevel: profile.experienceLevel,
+
         ...profile // Store other fields for now to be safe
     };
 
@@ -98,6 +113,7 @@ function mapSessionToFirestore(session: WorkoutSession): SessionDocument {
         endedAt: session.endedAt || undefined,
         durationSeconds: session.durationSeconds,
         startedLocation: session.startedLocation,
+        startedTimeBucket: session.startedTimeBucket,
         focusMuscles: session.focusMuscles,
         preWorkoutSorenessSnapshot: session.preWorkoutSorenessSnapshot,
         exerciseEntries: session.exerciseEntries.map(e => ({
@@ -123,10 +139,11 @@ function mapFirestoreToSession(doc: SessionDocument): WorkoutSession {
         startedAt: doc.startedAt,
         endedAt: doc.endedAt || null,
         durationSeconds: doc.durationSeconds,
-        startedLocation: doc.startedLocation,
+        startedLocation: doc.startedLocation || { type: 'gym' }, // Fallback
+        startedTimeBucket: doc.startedTimeBucket,
         focusMuscles: doc.focusMuscles,
         preWorkoutSorenessSnapshot: doc.preWorkoutSorenessSnapshot,
-        sets: [], // Legacy field empty
+
         exerciseEntries: doc.exerciseEntries.map(e => ({
             id: e.id,
             exerciseId: e.exerciseId,
